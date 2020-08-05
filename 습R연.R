@@ -87,4 +87,17 @@ qnorm(0.8,mean=80,sd=10)
 # 중간 60%찾기
 qnorm(0.2,mean=80,sd=10)
 qnorm(0.8,mean=80,sd=10)
- 
+# 문자 쪼개기
+a <- strsplit("how are you?",split="")
+# 문자 다시 합치기 
+paste(a[[1]],collapse="")
+# 문자 순서 뒤바꾸기
+reversed <- a[[1]][12:1]
+reversed
+# 문자 순서 뒤바꾸는 함수 만들기
+reverse_myf <- function (string){
+  a <- strsplit(string,split="")
+  reversed <- a[[1]][nchar(string):1]
+  paste(reversed,collapse="")
+}
+reverse_myf("love of my life")
