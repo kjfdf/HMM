@@ -29,7 +29,7 @@ sur <- read.csv("PROACT_Survival_all.csv")
 write.csv(all_pro_gast,"PROACT_BMRstaging_new.csv")
 gastrostomy <- read.csv("ALSFRS_revised.csv")
 gastrostomy_ <- gastrostomy %>% select(SubjectID,feature_delta,Q5a_Cutting_without_Gastrostomy,Q5b_Cutting_with_Gastrostomy)
-all_pro_gast <- all_pro %>% right_join(gastrostomy_,by=c("SubjectID","feature_delta"))
+all_pro_gast <- all_pro %>% full_join(gastrostomy_,by=c("SubjectID","feature_delta"))
 write.csv(all_pro_gast,"PROACT_BMRstaging_new.csv")
 names(pro)
 names(sur)
@@ -40,43 +40,43 @@ str(all_pro)
 dim(all_pro)
 all_pro$status <- as.factor(all_pro$status)
 #King staging
-all_pro_gast_all %>% filter(status==1)
-str(all_pro_gast_all)
-all_pro_gast_all <- all_pro_gast_all %>% mutate(bulbar=case_when(
-    Q1_Speech&Q2_Salivation&Q3_Swallowing==4~0,
-    Q1_Speech|Q2_Salivation|Q3_Swallowing<4~1
-  )
-) 
-all_pro_gast_all <- all_pro_gast_all %>% mutate(upper=case_when(
+# all_pro_gast_all %>% filter(status==1)
+# str(all_pro_gast)
+all_pro_gast <- all_pro_gast %>% mutate(bulbar=case_when(
+  Q1_Speech&Q2_Salivation&Q3_Swallowing==4~0,
+  Q1_Speech|Q2_Salivation|Q3_Swallowing<4~1
+)
+)
+all_pro_gast <- all_pro_gast %>% mutate(upper=case_when(
   Q4_Handwriting|Q5_Cutting|Q6_Dressing_and_Hygiene==4~0,
   Q4_Handwriting|Q5_Cutting|Q6_Dressing_and_Hygiene<4~1
-  )
-) 
-all_pro_gast_all <- all_pro_gast_all %>% mutate(lower=case_when(
-    Q7_Turning_in_Bed|Q8_Walking|Q9_Climbing_Stairs==4~0,
-    Q7_Turning_in_Bed|Q8_Walking|Q9_Climbing_Stairs<4~1
-  )
 )
-all_pro_gast_all$King <- ifelse(all_pro_gast_all$R3_Respiratory_Insufficiency<3,"4b",
-                                ifelse(all_pro_gast_all$Q5b_Cutting_with_Gastrostomy<=4,"4a",as.factor(all_pro_gast_all$b_c_ls)))
-all_pro_gast_all_na <- all_pro_gast_all %>% filter(is.na(King)) %>% mutate(King=bulbar+upper+lower)
-all_pro_gast_all_notna <- all_pro_gast_all %>% filter(!is.na(King))
-class(all_pro_gast_all_notna$King)
-all_pro_gast_all_na$King <- as.factor(all_pro_gast_all_na$King)
-all_pro_gast_all_notna$King <- as.factor(all_pro_gast_all_notna$King)
-all_pro_gast_all_notna$King
-all_pro_gast_all_na$King
-all_pro_gast_all$MiToS
-all_pro_gast_all_na
-all_pro_gast_all <- rbind(all_pro_gast_all_na,all_pro_gast_all_notna)
+) 
+all_pro_gast <- all_pro_gast %>% mutate(lower=case_when(
+  Q7_Turning_in_Bed|Q8_Walking|Q9_Climbing_Stairs==4~0,
+  Q7_Turning_in_Bed|Q8_Walking|Q9_Climbing_Stairs<4~1
+)
+)
+all_pro_gast$King <- ifelse(all_pro_gast$R3_Respiratory_Insufficiency<3,"4b",
+                                ifelse(all_pro_gast$Q5b_Cutting_with_Gastrostomy<=4,"4a",as.factor(all_pro_gast$b_c_ls)))
+all_pro_gast_na <- all_pro_gast%>% filter(is.na(King)) %>% mutate(King=bulbar+upper+lower)
+all_pro_gast_notna <- all_pro_gast %>% filter(!is.na(King))
+all_pro_gast_na$King <- as.factor(all_pro_gast_na$King)
+all_pro_gast_notna$King <- as.factor(all_pro_gast_notna$King)
+# all_pro_gast_notna$King
+# all_pro_gast_na$King
+# all_pro_gast_all_notna
+all_pro_gast_all <- rbind(all_pro_gast_na,all_pro_gast_notna)
 all_pro_gast_all %>% arrange(SubjectID,feature_delta)
-table(all_pro_gast_all$King)
+all_pro_gast_all %>% group_by(King) %>% tally()
+# all_pro_gast_all %>% filter(is.na(King))
 #MiToS staging
 all_pro_gast_all$movement <- ifelse(all_pro_gast_all$Q8_Walking<=1|all_pro_gast_all$Q6_Dressing_and_Hygiene<=1,1,0)
 all_pro_gast_all$swallowing <- ifelse(all_pro_gast_all$Q3_Swallowing<=1,1,0)
 all_pro_gast_all$communicating <- ifelse(all_pro_gast_all$Q1_Speech<=1&all_pro_gast_all$Q4_Handwriting<=1,1,0)
 all_pro_gast_all$breathing <- ifelse(all_pro_gast_all$R1_Dyspnea<=1|all_pro_gast_all$R3_Respiratory_Insufficiency<=2,1,0)
 all_pro_gast_all <- all_pro_gast_all %>% mutate(MiToS=movement+swallowing+communicating+breathing)
+all_pro_gast_all %>% group_by(MiToS) %>% tally()
 # ALSFRS-R 1~11, 12 collapse 5 categories to 3 categories ALSFRS-R 1~11은 0,1 to 0, 2,3 to 1, 4 to 2 and ALSFRS-R 12는 0은 0, 1~3은 1, 4는 2로 
 all_pro <- all_pro %>% mutate(b1=case_when(
   Q1_Speech<2~0,
@@ -169,31 +169,38 @@ all_pro_gast <- all_pro_gast %>% mutate(M=case_when(
   m1+m2+m3<13~2
 ))
 # BRM staging은 B+M+R을 BMR stage 0부터 4까지로 collapse: B+M+R 0은 0, 1과2는 1로, 3과4는 2로, 5는 3으로 ,6은 4로하되 ALSFRS-R 12번이 2점이하인 경우(NIV적용상태)와 5b가 NA가 아닌 경우(gastrostomy받은경우)는 4로
-all_pro_gast_1 <- all_pro_gast %>% filter(R3_Respiratory_Insufficiency>2&is.na(Q5b_Cutting_with_Gastrostomy)) %>% mutate(BMR_stage=case_when(
+all_pro_gast_all_1 <- all_pro_gast_all %>% filter(R3_Respiratory_Insufficiency>2&is.na(Q5b_Cutting_with_Gastrostomy)) %>% mutate(BMR_stage=case_when(
   B+M+R<1~0,
   B+M+R<3~1,
   B+M+R<5~2,
   B+M+R==5~3,
   B+M+R==6~4
 ))
-all_pro_gast_2 <- all_pro_gast %>% filter(R3_Respiratory_Insufficiency<3|!is.na(Q5b_Cutting_with_Gastrostomy))
-all_pro_gast_2$BMR_stage <- 4
-all_pro_gast_all <- rbind(all_pro_gast_1,all_pro_gast_2)
+all_pro_gast_all_2 <- all_pro_gast_all %>% anti_join(all_pro_gast_all_1)
+all_pro_gast_all_2 <- all_pro_gast_all_2 %>% mutate(BMR_stage=case_when(
+  R3_Respiratory_Insufficiency<3|Q5b_Cutting_with_Gastrostomy!=NA~4,
+  TRUE~NA_real_
+))
+all_pro_gast_all_2 %>% group_by(BMR_stage) %>% tally()
+all_pro_gast_all <- rbind(all_pro_gast_all_1,all_pro_gast_all_2)
 all_pro_gast_all <- all_pro_gast_all %>% arrange(SubjectID,feature_delta)
 all_pro_gast_all %>% select(R3_Respiratory_Insufficiency,Q5b_Cutting_with_Gastrostomy,Q5a_Cutting_without_Gastrostomy,B,M,R,BMR_stage)
+all_pro_gast_all %>% group_by(BMR_stage) %>% tally()
 # stage내의 homogeneity와 stage간 discriminatory ability비교, Spearman’s coefficient, chisquare test
 # stage별로 standardized median time비교, Median number of months from onset
+
 all_pro_gast_median_time <- all_pro_gast_all %>% filter(status==1)
 all_pro_gast_median_time1 <- all_pro_gast_median_time %>% group_by(SubjectID) %>% 
-  mutate(prog=BMR_stage-lag(BMR_stage,default = BMR_stage[1]))
-all_pro_gast_median_time1 <- all_pro_gast_median_time1 %>% mutate(stan_med_time=(feature_delta-min(feature_delta))/time_event)
-all_pro_gast_median_time3 <- all_pro_gast_median_time2 %>% group_by(SubjectID,BMR_stage) %>% arrange(feature_delta) %>% slice(1L)
-  slice(-1,-nrow(.))
-all_pro_gast_median_time4 %>% select(SubjectID,feature_delta,BMR_stage)
-all_pro_gast_median_time4 %>% group_by(BMR_stage) %>% summarise(med_time=median(stan_med_time))
-all_pro_gast_median_time5 <- all_pro_gast_median_time2 %>% group_by(SubjectID,King) %>% arrange(feature_delta) %>% slice(1L)
+  mutate(BMR_prog=BMR_stage-lag(BMR_stage,default = BMR_stage[1]))
+all_pro_gast_median_time1 <- all_pro_gast_median_time1 %>% group_by(SubjectID) %>% mutate(stan_med_time=(feature_delta-min(feature_delta))/time_event)
+all_pro_gast_median_time3 <- all_pro_gast_median_time1 %>% group_by(SubjectID,BMR_stage) %>% arrange(feature_delta) %>% filter(stan_med_time!=0)
+all_pro_gast_median_time3 %>% select(SubjectID,feature_delta,BMR_stage,stan_med_time)
+all_pro_gast_median_time3 %>% group_by(BMR_stage) %>% summarise(med_time=median(stan_med_time))
+# all_pro_gast_median_time3 %>% group_by(BMR_stage) %>% summarise(mean_time=mean(stan_med_time))
+all_pro_gast_median_time5 <- all_pro_gast_median_time1 %>% group_by(SubjectID,King) %>% arrange(feature_delta) %>% filter(stan_med_time!=0)
 all_pro_gast_median_time5 %>% group_by(King) %>% summarise(med_time=median(stan_med_time))
-all_pro_gast_median_time6 <- all_pro_gast_median_time2 %>% group_by(SubjectID,MiToS) %>% arrange(feature_delta) %>% slice(1L)
+# all_pro_gast_median_time5 %>% group_by(King) %>% summarise(mean_time=mean(stan_med_time))
+all_pro_gast_median_time6 <- all_pro_gast_median_time2 %>% group_by(SubjectID,MiToS) %>% arrange(feature_delta) %>% filter(stan_med_time!=0)
 all_pro_gast_median_time6 %>% group_by(MiToS) %>% summarise(med_time=median(stan_med_time))
 # stage별 survival curve비교 stage 0,1,2,3,4의 비교 Kaplan-Meier survival analysis and log-rank test, site of onset
 # stage간 transition probability by Markov model 
