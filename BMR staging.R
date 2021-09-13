@@ -58,7 +58,7 @@ all_pro_gast <- all_pro_gast %>% mutate(lower=case_when(
 )
 )
 all_pro_gast$King <- ifelse(all_pro_gast$R3_Respiratory_Insufficiency<3,"4b",
-                                ifelse(all_pro_gast$Q5b_Cutting_with_Gastrostomy<=4,"4a",as.factor(all_pro_gast$b_c_ls)))
+                            ifelse(all_pro_gast$Q5b_Cutting_with_Gastrostomy<=4,"4a",as.factor(all_pro_gast$b_c_ls)))
 all_pro_gast_na <- all_pro_gast%>% filter(is.na(King)) %>% mutate(King=bulbar+upper+lower)
 all_pro_gast_notna <- all_pro_gast %>% filter(!is.na(King))
 all_pro_gast_na$King <- as.factor(all_pro_gast_na$King)
@@ -168,34 +168,35 @@ all_pro_gast <- all_pro_gast %>% mutate(M=case_when(
   m1+m2+m3<9~1,
   m1+m2+m3<13~2
 ))
-# BRM staging은 B+M+R을 BMR stage 0부터 4까지로 collapse: B+M+R 0은 0, 1과2는 1로, 3과4는 2로, 5는 3으로 ,6은 4로하되 ALSFRS-R 12번이 2점이하인 경우(NIV적용상태)와 5b가 NA가 아닌 경우(gastrostomy받은경우)는 4로
+# BRM staging은 B+M+R을 BMR stage 0부터 4까지로 collapse: B+M+R 0은 4로, 1과2는 3으로, 3과4는 2로, 5는 1로 ,6은 0으로하되 ALSFRS-R 12번이 2점이하인 경우(NIV적용상태)와 5b가 NA가 아닌 경우(gastrostomy받은경우)는 4로
 all_pro_gast_all_1 <- all_pro_gast_all %>% filter(R3_Respiratory_Insufficiency>2&is.na(Q5b_Cutting_with_Gastrostomy)) %>% mutate(BMR_stage=case_when(
-  B+M+R<1~0,
-  B+M+R<3~1,
+  B+M+R==6~0,
+  B+M+R==5~1,
   B+M+R<5~2,
-  B+M+R==5~3,
-  B+M+R==6~4
+  B+M+R<3~3,
+  B+M+R<1~4
 ))
-all_pro_gast_all_2 <- all_pro_gast_all %>% anti_join(all_pro_gast_all_1)
-all_pro_gast_all_2 <- all_pro_gast_all_2 %>% mutate(BMR_stage=case_when(
-  R3_Respiratory_Insufficiency<3|Q5b_Cutting_with_Gastrostomy!=NA~4,
-  TRUE~NA_real_
-))
+all_pro_gast_all_2 <- all_pro_gast_all %>% filter(R3_Respiratory_Insufficiency<=2|!is.na(Q5b_Cutting_with_Gastrostomy)) %>% mutate(BMR_stage=4)
 all_pro_gast_all_2 %>% group_by(BMR_stage) %>% tally()
 all_pro_gast_all <- rbind(all_pro_gast_all_1,all_pro_gast_all_2)
 all_pro_gast_all <- all_pro_gast_all %>% arrange(SubjectID,feature_delta)
-all_pro_gast_all %>% select(R3_Respiratory_Insufficiency,Q5b_Cutting_with_Gastrostomy,Q5a_Cutting_without_Gastrostomy,B,M,R,BMR_stage)
-all_pro_gast_all %>% group_by(BMR_stage) %>% tally()
+all_pro_gast_all %>% select(SubjectID,feature_delta,R3_Respiratory_Insufficiency,Q5b_Cutting_with_Gastrostomy,Q5a_Cutting_without_Gastrostomy,B,M,R,BMR_stage)
+all_pro_gast_all %>% filter(R3_Respiratory_Insufficiency<=2|Q5b_Cutting_with_Gastrostomy<=4) %>% group_by(BMR_stage) %>% summarise(n=n())
+all_pro_gast_all_1 %>% filter(R3_Respiratory_Insufficiency<=2|Q5b_Cutting_with_Gastrostomy<=4) %>% group_by(BMR_stage) %>% summarise(n=n())
+all_pro_gast_all_2 %>% filter(R3_Respiratory_Insufficiency<=2|Q5b_Cutting_with_Gastrostomy<=4) %>% group_by(BMR_stage) %>% summarise(n=n())
+all_pro_gast_all_1 %>% arrange(SubjectID,feature_delta) %>%  select(SubjectID,feature_delta,R3_Respiratory_Insufficiency,Q5b_Cutting_with_Gastrostomy,Q5a_Cutting_without_Gastrostomy,B,M,R,BMR_stage)
+all_pro_gast_all_2 %>% arrange(SubjectID,feature_delta) %>%  select(SubjectID,feature_delta,R3_Respiratory_Insufficiency,Q5b_Cutting_with_Gastrostomy,Q5a_Cutting_without_Gastrostomy,B,M,R,BMR_stage)
+all_pro_gast_all %>% group_by(SubjectID,feature_delta) %>% select(ALSFRS_R_Total,B,M,R,BMR_stage,King,MiToS)
+all_pro_gast_median_time1 <- all_pro_gast_median_time %>% group_by(SubjectID) %>%
+  mutate(BMR_prog=BMR_stage-lag(BMR_stage,default = BMR_stage[1]))
 # stage내의 homogeneity와 stage간 discriminatory ability비교, Spearman’s coefficient, chisquare test
 # stage별로 standardized median time비교, Median number of months from onset
-
 all_pro_gast_median_time <- all_pro_gast_all %>% filter(status==1)
-all_pro_gast_median_time1 <- all_pro_gast_median_time %>% group_by(SubjectID) %>% 
-  mutate(BMR_prog=BMR_stage-lag(BMR_stage,default = BMR_stage[1]))
-all_pro_gast_median_time1 <- all_pro_gast_median_time1 %>% group_by(SubjectID) %>% mutate(stan_med_time=(feature_delta-min(feature_delta))/time_event)
+all_pro_gast_median_time1 <- all_pro_gast_median_time1 %>% group_by(SubjectID) %>% mutate(stan_med_time=feature_delta/time_event)
 all_pro_gast_median_time3 <- all_pro_gast_median_time1 %>% group_by(SubjectID,BMR_stage) %>% arrange(feature_delta) %>% filter(stan_med_time!=0)
 all_pro_gast_median_time3 %>% select(SubjectID,feature_delta,BMR_stage,stan_med_time)
-all_pro_gast_median_time3 %>% group_by(BMR_stage) %>% summarise(med_time=median(stan_med_time))
+all_pro_gast_median_time3 %>% group_by(BMR_stage) %>% summarise(med_stan_time=median(stan_med_time), med_time=median(feature_delta))
+all_pro_gast_median_time3 %>% group_by(B,M,R,BMR_stage,ALSFRS_R_Total) %>% tally() %>% print(n = 100)
 # all_pro_gast_median_time3 %>% group_by(BMR_stage) %>% summarise(mean_time=mean(stan_med_time))
 all_pro_gast_median_time5 <- all_pro_gast_median_time1 %>% group_by(SubjectID,King) %>% arrange(feature_delta) %>% filter(stan_med_time!=0)
 all_pro_gast_median_time5 %>% group_by(King) %>% summarise(med_time=median(stan_med_time))
