@@ -25,6 +25,7 @@ library(writexl)
 library(lubridate)
 library(gmodels)
 library(moonBook)
+options("scipen"=100)
 pro <- read.csv("PROACT.csv")
 sur <- read.csv("PROACT_Survival_all.csv")
 demo <- read.csv("PROACT_preprocessed.csv")
@@ -63,7 +64,7 @@ all_pro_gast_all <- all_pro_gast_all %>% mutate(lower=case_when(
 )
 all_pro_gast_all <- all_pro_gast_all %>% mutate(b_c_ls=bulbar+upper+lower)
 all_pro_gast_all$King <- ifelse(all_pro_gast_all$R3_Respiratory_Insufficiency<3,"4b",
-                            ifelse(all_pro_gast_all$Q5b_Cutting_with_Gastrostomy<=4,"4a",as.factor(all_pro_gast_all$b_c_ls)))
+                                ifelse(all_pro_gast_all$Q5b_Cutting_with_Gastrostomy<=4,"4a",as.factor(all_pro_gast_all$b_c_ls)))
 all_pro_gast_all_na <- all_pro_gast_all%>% filter(is.na(King)) %>% mutate(King=bulbar+upper+lower)
 all_pro_gast_all_notna <- all_pro_gast_all %>% filter(!is.na(King))
 all_pro_gast_all_na$King <- as.factor(all_pro_gast_all_na$King)
@@ -73,8 +74,6 @@ all_pro_gast_all_notna$King <- as.factor(all_pro_gast_all_notna$King)
 # all_pro_gast_all_notna
 all_pro_gast_all <- rbind(all_pro_gast_all_na,all_pro_gast_all_notna)
 all_pro_gast_all %>% arrange(SubjectID,feature_delta)
-all_pro_gast_all %>% count(King)
-all_pro_gast_all %>% count(MiToS)
 # all_pro_gast_all %>% filter(is.na(King))
 #MiToS staging
 all_pro_gast_all$movement <- ifelse(all_pro_gast_all$Q8_Walking<=1|all_pro_gast_all$Q6_Dressing_and_Hygiene<=1,1,0)
@@ -89,8 +88,6 @@ all_pro <- all_pro %>% mutate(b1=case_when(
   Q1_Speech<4~1,
   Q1_Speech==4~2
 ))
-CrossTable(all_pro$Q1_Speech,all_pro$b1)
-table(all_pro$Q1_Speech,all_pro$b1)
 all_pro <- all_pro %>% mutate(b2=case_when(
   Q2_Salivation<2~0,
   Q2_Salivation<4~1,
@@ -146,18 +143,7 @@ all_pro <- all_pro %>% mutate(r3=case_when(
   R3_Respiratory_Insufficiency<4~1,
   R3_Respiratory_Insufficiency==4~2
 ))
-table(all_pro$Q2_Salivation,all_pro$b2)
-table(all_pro$Q3_Swallowing,all_pro$b3)
-table(all_pro$Q4_Handwriting,all_pro$m1)
-table(all_pro$Q5_Cutting,all_pro$m2)
-table(all_pro$Q6_Dressing_and_Hygiene,all_pro$m3)
-table(all_pro$Q7_Turning_in_Bed,all_pro$m4)
-table(all_pro$Q8_Walking,all_pro$m5)
-table(all_pro$Q9_Climbing_Stairs,all_pro$m6)
-table(all_pro$R1_Dyspnea,all_pro$r1)
-table(all_pro$R2_Orthopnea,all_pro$r2)
-table(all_pro$R3_Respiratory_Insufficiency,all_pro$r3)
-# Bular, Respiration collapse: b1-3와 r1-3의 합계값 0-2를 0, 3-4를 1로, 5-6을 2로 
+# Bular, Respiration 각각 collapse: b1-3와 r1-3의 합계값을 각각 0-2를 0, 3-4를 1로, 5-6을 2로 
 # Motor collapse: m1-6의 합계를 가지고 0-4를 0으로, 5-8을 1로, 9-12를 2로 
 all_pro_gast_all <- all_pro_gast_all %>% mutate(B=case_when(
   b1+b2+b3<3~0,
@@ -183,19 +169,9 @@ all_pro_gast_all_1 <- all_pro_gast_all %>% filter(R3_Respiratory_Insufficiency>2
   B+M+R<1~4
 ))
 all_pro_gast_all_2 <- all_pro_gast_all %>% filter(R3_Respiratory_Insufficiency<=2|!is.na(Q5b_Cutting_with_Gastrostomy)) %>% mutate(BMR_stage=4)
-all_pro_gast_all_2 %>% group_by(BMR_stage) %>% tally()
 all_pro_gast_all <- rbind(all_pro_gast_all_1,all_pro_gast_all_2)
 all_pro_gast_all <- all_pro_gast_all %>% arrange(SubjectID,feature_delta)
-all_pro_gast_all %>% select(SubjectID,feature_delta,R3_Respiratory_Insufficiency,Q5b_Cutting_with_Gastrostomy,Q5a_Cutting_without_Gastrostomy,B,M,R,BMR_stage)
-all_pro_gast_all %>% filter(R3_Respiratory_Insufficiency<=2|Q5b_Cutting_with_Gastrostomy<=4) %>% group_by(BMR_stage) %>% summarise(n=n())
-all_pro_gast_all_1 %>% filter(R3_Respiratory_Insufficiency<=2|Q5b_Cutting_with_Gastrostomy<=4) %>% group_by(BMR_stage) %>% summarise(n=n())
-all_pro_gast_all_2 %>% filter(R3_Respiratory_Insufficiency<=2|Q5b_Cutting_with_Gastrostomy<=4) %>% group_by(BMR_stage) %>% summarise(n=n())
-all_pro_gast_all_1 %>% arrange(SubjectID,feature_delta) %>%  select(SubjectID,feature_delta,R3_Respiratory_Insufficiency,Q5b_Cutting_with_Gastrostomy,Q5a_Cutting_without_Gastrostomy,B,M,R,BMR_stage)
-all_pro_gast_all_2 %>% arrange(SubjectID,feature_delta) %>%  select(SubjectID,feature_delta,R3_Respiratory_Insufficiency,Q5b_Cutting_with_Gastrostomy,Q5a_Cutting_without_Gastrostomy,B,M,R,BMR_stage)
-all_pro_gast_all %>% group_by(SubjectID,feature_delta) %>% select(ALSFRS_R_Total,B,M,R,BMR_stage,King,MiToS) %>% print(n=200)
-all_pro_gast_all %>% distinct(SubjectID,time_event) %>% head(10)
-all_pro_gast_median_time1 <- all_pro_gast_median_time %>% group_by(SubjectID) %>%
-  mutate(BMR_prog=BMR_stage-lag(BMR_stage,default = BMR_stage[1]))
+# DurationFromOnset은 symptom onset부터 f/u시점까지의 기간, SurvivalDurationFromOnset은 onset부터 생존까지의 기간 
 all_pro_gast_all <- all_pro_gast_all %>% mutate(Dx_delay=abs(diag_delta),From_onset=abs(onset_delta))
 all_pro_gast_all <- all_pro_gast_all %>% mutate(DurationFromOnset=From_onset+feature_delta)
 all_pro_gast_all <- all_pro_gast_all %>% mutate(SurvDurationFromOnset=From_onset+time_event)
@@ -217,15 +193,13 @@ all_pro_gast_median_time %>% group_by(MiToS) %>% summarise(median(MiToS_stan_tim
 all_pro_gast_median_time %>% group_by(MiToS) %>% summarise(mean(MiToS_stan_time))
 all_pro_gast_median_time %>% group_by(MiToS) %>% summarise(mean(DurationFromOnset))
 all_pro_gast_median_time3 <- all_pro_gast_median_time1 %>% group_by(SubjectID,BMR_stage) %>% arrange(feature_delta) %>% filter(stan_med_time!=0)
-all_pro_gast_median_time3 %>% select(SubjectID,feature_delta,BMR_stage,stan_med_time)
-all_pro_gast_median_time3 %>% group_by(BMR_stage) %>% summarise(med_stan_time=median(stan_med_time), med_time=median(feature_delta))
-all_pro_gast_median_time3 %>% group_by(B,M,R,BMR_stage,ALSFRS_R_Total) %>% tally() %>% print(n = 100)
+all_pro_gast_median_time3 %>% group_by(BMR_stage) %>% summarise(med_stan_time=median(stan_med_time), med_time=median(feature_delta)%/%12)
 # all_pro_gast_median_time3 %>% group_by(BMR_stage) %>% summarise(mean_time=mean(stan_med_time))
 all_pro_gast_median_time5 <- all_pro_gast_median_time1 %>% group_by(SubjectID,King) %>% arrange(feature_delta) %>% filter(stan_med_time!=0)
-all_pro_gast_median_time5 %>% group_by(King) %>% summarise(med_time=median(stan_med_time))
+all_pro_gast_median_time5 %>% group_by(King) %>% summarise(med_stan_time=median(stan_med_time),med_time=median(feature_delta)%/%12)
 # all_pro_gast_median_time5 %>% group_by(King) %>% summarise(mean_time=mean(stan_med_time))
 all_pro_gast_median_time6 <- all_pro_gast_median_time2 %>% group_by(SubjectID,MiToS) %>% arrange(feature_delta) %>% filter(stan_med_time!=0)
-all_pro_gast_median_time6 %>% group_by(MiToS) %>% summarise(med_time=median(stan_med_time))
+all_pro_gast_median_time6 %>% group_by(MiToS) %>% summarise(med_stan_time=median(stan_med_time), med_time=median(feature_delta)%/%12)
 # stage별 survival curve비교 stage 0,1,2,3,4의 비교 Kaplan-Meier survival analysis and log-rank test, site of onset
 # Cox regression model to calculate the log-likelihood in order to determine homogeneity, Cochran–Armitage test for trend to measure the discriminatory ability of each staging system.
 all_pro_gast_all_forsuvvival <- all_pro_gast_all %>% group_by(SubjectID) %>% filter(feature_delta==min(feature_delta))
@@ -237,7 +211,7 @@ ggsurvplot(survfit(Surv(time_event,status==1)~MiToS,data=all_pro_gast_all_forsuv
 survdiff(Surv(time_event,status==1)~King,data=all_pro_gast_all_forsuvvival) # X2=96.5, p<.001
 survdiff(Surv(time_event,status==1)~MiToS,data=all_pro_gast_all_forsuvvival) # X2=32.9, p<.001
 all_pro_gast_all_forsuvvival$BMR_stage=factor(all_pro_gast_all_forsuvvival$BMR_stage,levels=c("0","1","2","3","4")) 
-#BMR stage의 stage간의 discriminatory ability
+#BMR stage의 stage간의 discriminatory ability, Cochrane-Armitage test
 result <- table(all_pro_gast_all_forsuvvival$status,all_pro_gast_all_forsuvvival$BMR_stage)
 round(prop.table(result)*100,2)
 prop.trend.test(result[2,],colSums(result)) #x2=130.25, p<.001
@@ -245,7 +219,18 @@ plot(t(result),col=c("grey","black"),
      main="BMR stage and death",
      ylab="death",
      xlab="BMR stage")
-#King stage의 stage간의 discriminatory ability
+#BMR stage간 duration 기간 차이있는지 비교, Kruskal-Wallis test
+shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$BMR_stage==0])
+shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$BMR_stage==1])
+shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$BMR_stage==2])
+shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$BMR_stage==3])
+shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$BMR_stage==4])
+kruskal.test(SurvDurationFromOnset~factor(BMR_stage),data=all_pro_gast_all_forsuvvival)
+install.packages("nparcomp") #kruskal walis test에서의 사후검정
+library(nparcomp)
+result <- mctp(SurvDurationFromOnset~factor(BMR_stage),data=all_pro_gast_all_forsuvvival)
+summary(result)
+#King stage의 stage간의 discriminatory ability, Cochrane-Armitage test
 result <- table(all_pro_gast_all_forsuvvival$status,all_pro_gast_all_forsuvvival$King)
 round(prop.table(result)*100,2)
 prop.trend.test(result[2,],colSums(result)) #x2=121.7, p<.001
@@ -253,7 +238,17 @@ plot(t(result),col=c("grey","black"),
      main="King stage and death",
      ylab="death",
      xlab="King stage")
-#MiToS stage의 stage간의 discriminatory ability
+#King stage간 duration 기간 차이있는지 비교, Kruskal-Wallis test
+shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$King==0])
+shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$King==1])
+shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$King==2])
+shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$King==3])
+shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$King=="4a"])
+shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$King=="4b"])
+kruskal.test(SurvDurationFromOnset~factor(King),data=all_pro_gast_all_forsuvvival)
+result <- mctp(SurvDurationFromOnset~factor(King),data=all_pro_gast_all_forsuvvival)
+summary(result)
+#MiToS stage의 stage간의 discriminatory ability, Cochrane-Armitage test
 result <- table(all_pro_gast_all_forsuvvival$status,all_pro_gast_all_forsuvvival$MiToS)
 round(prop.table(result)*100,2)
 prop.trend.test(result[2,],colSums(result)) #x2=24.759, p<.001
@@ -261,6 +256,15 @@ plot(t(result),col=c("grey","black"),
      main="MiToS stage and death",
      ylab="death",
      xlab="MiToS stage")
+#MiToS stage간 duration 기간 차이있는지 비교, Kruskal-Wallis test
+shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$MiToS==0])
+shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$MiToS==1])
+shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$MiToS==2])
+shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$MiToS==3])
+shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$MiToS==4])
+kruskal.test(SurvDurationFromOnset~factor(MiToS),data=all_pro_gast_all_forsuvvival)
+result <- mctp(SurvDurationFromOnset~factor(MiToS),data=all_pro_gast_all_forsuvvival)
+summary(result)
 # stage간 transition probability by Markov model 
 all_pro_gast_all <- read.csv("BMR_staging_PROACT.csv")
 write.csv(all_pro_gast_all,"BMR_staging_PROACT.csv")
