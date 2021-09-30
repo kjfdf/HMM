@@ -25,6 +25,8 @@ library(writexl)
 library(lubridate)
 library(gmodels)
 library(moonBook)
+# install.packages("nparcomp") #kruskal walis test에서의 사후검정
+library(nparcomp)
 options("scipen"=100)
 pro <- read.csv("PROACT.csv")
 sur <- read.csv("PROACT_Survival_all.csv")
@@ -203,7 +205,7 @@ all_pro_gast_median_time6 %>% group_by(MiToS) %>% summarise(med_stan_time=median
 # stage별 survival curve비교 stage 0,1,2,3,4의 비교 Kaplan-Meier survival analysis and log-rank test, site of onset
 # Cox regression model to calculate the log-likelihood in order to determine homogeneity, Cochran–Armitage test for trend to measure the discriminatory ability of each staging system.
 all_pro_gast_all_forsuvvival <- all_pro_gast_all %>% group_by(SubjectID) %>% filter(feature_delta==min(feature_delta))
-all_pro_gast_all_forsuvvival %>% count(BMR_stage)
+all_pro_gast_all_forsuvvival %>% summarise(n=n_distinct(SubjectID))
 survdiff(Surv(time_event,status==1)~BMR_stage,data=all_pro_gast_all_forsuvvival) #X2=119, p<.001
 ggsurvplot(survfit(Surv(time_event,status==1)~BMR_stage,data=all_pro_gast_all_forsuvvival),title="Kaplan Meier curve for BMR stage at entry")
 ggsurvplot(survfit(Surv(time_event,status==1)~King,data=all_pro_gast_all_forsuvvival),title="Kaplan Meier curve for King stage at entry")
@@ -211,6 +213,8 @@ ggsurvplot(survfit(Surv(time_event,status==1)~MiToS,data=all_pro_gast_all_forsuv
 survdiff(Surv(time_event,status==1)~King,data=all_pro_gast_all_forsuvvival) # X2=96.5, p<.001
 survdiff(Surv(time_event,status==1)~MiToS,data=all_pro_gast_all_forsuvvival) # X2=32.9, p<.001
 all_pro_gast_all_forsuvvival$BMR_stage=factor(all_pro_gast_all_forsuvvival$BMR_stage,levels=c("0","1","2","3","4")) 
+all_pro_gast_all_forsuvvival$King=factor(all_pro_gast_all_forsuvvival$King,levels=c("0","1","2","3","4a","4b")) 
+all_pro_gast_all_forsuvvival$MiToS=factor(all_pro_gast_all_forsuvvival$MiToS,levels=c("0","1","2","3","4")) 
 #BMR stage의 stage간의 discriminatory ability, Cochrane-Armitage test
 result <- table(all_pro_gast_all_forsuvvival$status,all_pro_gast_all_forsuvvival$BMR_stage)
 round(prop.table(result)*100,2)
@@ -226,10 +230,23 @@ shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all
 shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$BMR_stage==3])
 shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$BMR_stage==4])
 kruskal.test(SurvDurationFromOnset~factor(BMR_stage),data=all_pro_gast_all_forsuvvival)
-install.packages("nparcomp") #kruskal walis test에서의 사후검정
-library(nparcomp)
-result <- mctp(SurvDurationFromOnset~factor(BMR_stage),data=all_pro_gast_all_forsuvvival)
+result=mctp(SurvDurationFromOnset~factor(BMR_stage),data=all_pro_gast_all_forsuvvival)
 summary(result)
+pairwise.wilcox.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset, all_pro_gast_all_forsuvvival$BMR_stage, p.adj="bonferroni") #0:314, 1:1116, 2:1016, 4:962
+all_pro_gast_all_forsuvvival %>% group_by(BMR_stage) %>% tally()
+df.summary <- df %>%
+  group_by(dose) %>%
+  summarise(
+    sd = sd(len, na.rm = TRUE),
+    len = mean(len)
+  )
+ggplot(
+  df.summary, 
+  aes(x = len, y = dose, xmin = len-sd, xmax = len+sd)
+) +
+  geom_point(aes(color = dose)) +
+  geom_errorbarh(aes(color = dose), height=.2)+
+  theme_light()
 #King stage의 stage간의 discriminatory ability, Cochrane-Armitage test
 result <- table(all_pro_gast_all_forsuvvival$status,all_pro_gast_all_forsuvvival$King)
 round(prop.table(result)*100,2)
@@ -245,9 +262,11 @@ shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all
 shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$King==3])
 shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$King=="4a"])
 shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$King=="4b"])
+all_pro_gast_all_forsuvvival %>% group_by(King) %>% tally() #0:9, 1:336, 2:1077, 3:1024, 4a:757, 4b:205
 kruskal.test(SurvDurationFromOnset~factor(King),data=all_pro_gast_all_forsuvvival)
 result <- mctp(SurvDurationFromOnset~factor(King),data=all_pro_gast_all_forsuvvival)
 summary(result)
+pairwise.wilcox.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset, all_pro_gast_all_forsuvvival$King, p.adj="bonferroni") 
 #MiToS stage의 stage간의 discriminatory ability, Cochrane-Armitage test
 result <- table(all_pro_gast_all_forsuvvival$status,all_pro_gast_all_forsuvvival$MiToS)
 round(prop.table(result)*100,2)
@@ -262,6 +281,7 @@ shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all
 shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$MiToS==2])
 shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$MiToS==3])
 shapiro.test(all_pro_gast_all_forsuvvival$SurvDurationFromOnset[all_pro_gast_all_forsuvvival$MiToS==4])
+all_pro_gast_all_forsuvvival %>% group_by(MiToS) %>% tally() #0:2712, 1:639, 2:54, 3:3, 4:0
 kruskal.test(SurvDurationFromOnset~factor(MiToS),data=all_pro_gast_all_forsuvvival)
 result <- mctp(SurvDurationFromOnset~factor(MiToS),data=all_pro_gast_all_forsuvvival)
 summary(result)
