@@ -32,6 +32,8 @@ library(dlookr)
 library(broom)
 library(gridExtra)
 library(naniar)
+# install.packages("officer")
+library(officer)
 # install.packages("VIM")
 # install.packages("tidyverse")
 library(VIM)
@@ -39,6 +41,8 @@ library(VIM)
 library(dlookr)
 # install.packages("data.table")
 library(data.table)
+# install.packages("RColorBrewer")
+library(RColorBrewer)
 options("scipen"=100)
 options(max.print=1000000)
 pro <- read.csv("PROACT.csv")
@@ -337,6 +341,7 @@ proact5 %>% group_by(King,Mitos,BMR) %>% tally() %>% print(n=30)
 dim(proact5) #28749 rows
 proact5 %>% distinct(SubjectID) %>% tally() #3059 subjects
 
+
 #BMR staging Q1~9와 R1,2는 0,1을 0으로, 2,3을 1로, 4를 2로, R3는 0을 0으로, 1~3을 1로 4를 2로 collapse based on Rasch analysis, 
 #Q1~Q3는 B로, R1~3은 R로 collapse하되 0,1는 0, 2,3,4는 1로 5,6은 2로, Q4~9를 M으로 collapse 0~4는 0, 5~8은 1, 9~12는 2로 collapse 
 #B,M,R을 BMR로 collapse하되 B+M+R값이 6은 0으로 5는 1로, 4는 2로, 3,2는 3으로, 1,0은 4로 collapse. King stage 4a나 4b에 해당되는 상태는 stage 4
@@ -366,6 +371,7 @@ proact6 <- proact5 %>% mutate(b1=case_when(Q1_Speech==0|Q1_Speech==1~0,Q1_Speech
   select(-c(b1,b2,b3,m1,m2,m3,m4,m5,m6,r1,r2,r3,B,M,R))
 proact6 %>% group_by(King,Mitos,BMR1) %>% tally() %>% print(n=48)
 proact6 <- proact6 %>% arrange(SubjectID,feature_delta) #proact6: King, MiToS, BMR staging 데이터셋 
+
 proact6 %>% distinct(SubjectID) %>% tally() #3059 subjects
 
 # time from enrollment: King, MiToS, BMR
@@ -418,11 +424,6 @@ p9 <- ggplot(first,aes(BMR1))+
   scale_y_continuous(limits=c(0,2500))+
   labs(x="BMR stage",y="Number of subject")
 grid.arrange(p7,p8,p9,nrow=1)
-
-miss_var_summary(proact6)
-miss_case_summary(proact6)
-gg_miss_upset(proact6)
-aggr(proact6)
 
 # exclude patients with only one ALSFRS record
 temp <- proact6 %>% count(SubjectID) %>% filter(n>1)
@@ -488,29 +489,187 @@ p12 <- fu_als %>% ggplot(aes(feature_delta,BMR1,col=slope_gr,group=factor(Subjec
 
 grid.arrange(p10,p11,p12, nrow=1)
 
-proact6 <- proact6 %>% group_by(SubjectID) %>% mutate(visit=rank(feature_delta,na.last = NA))
-#first visit시의 data만 남기기 
-proact7 <- proact6 %>% filter(visit==1)
-proact99 <- proact6 %>% group_by(SubjectID) %>% mutate(BMR_first=first(BMR1))
-proact99 %>% group_by(SubjectID,BMR_first) %>%tally() 
-proact_death <- proact6 %>% filter(King==5)
-death_data <- surv %>% select(SubjectID,time_event)
-proact6 <- proact6 %>% full_join(death_data,by="SubjectID")
-proact6 <- fread("BMR_staging_new.csv") 
-glimpse(proact6)
-diagnose(proact6) %>% print(n=30)
-describe(proact6) %>% print(n=30)
-proact6 <- proact6 %>% group_by(SubjectID) %>% mutate(bmr_entry=first(BMR1),king_entry=first(King),mitos_entry=first(Mitos))
-proact6 <- proact6 %>% mutate(status=ifelse(is.na(status),0,status))
-proact6 %>% filter(status==1) %>% ggplot(aes(factor(bmr_entry),feature_delta))+geom_bar() #status NA를 0으로 변경 
-proact6 %>% group_by(status) %>% tally()
-plot1 <- ggsurvplot(survfit(Surv(feature_delta,status)~bmr_entry,data=proact6),title="Kaplan Meier curve for BMR stage") 
-ggsave("BMR_KM_plot.tiff",dpi=300)
-plot2 <- ggsurvplot(survfit(Surv(feature_delta,status)~king_entry,data=proact6),title="Kaplan Meier curve for BMR stage") 
-ggsave("King_KM_plot.tiff",dpi=300)
-plot3 <- ggsurvplot(survfit(Surv(feature_delta,status)~mitos_entry,data=proact6),title="Kaplan Meier curve for BMR stage") 
-ggsave("MiToS_KM_plot.tiff",dpi=300)
+#ALSFRS slope classification
+slope_alsfrs <- proact6 %>% group_by(SubjectID) %>% 
+  nest() %>% 
+  mutate(model=map(data,~lm(ALSFRS_R_Total~feature_delta,data=.x))) %>% 
+  mutate(coef=map(model,~tidy(.x))) %>% 
+  unnest(coef) %>% 
+  filter(term=="feature_delta") %>% 
+  select(SubjectID,estimate)
+cut_value <- quantile(slope_alsfrs,probs=c(0,0.25,0.75,1),na.rm=T)
+slope_alsfrs$slope_gr <- cut(slope_alsfrs$estimate,breaks=cut_value,include.lowest = T,right=F)
+proact8 <- proact7
+proact8 <- proact7 %>% left_join(slope_alsfrs,by="SubjectID") %>% full_join(proact7,by="SubjectID")
 
-fwrite(proact6,"BMR_staging_new.csv",append=F,quote=F,na="NA",dec=".",row.names=F,col.names=F)
+proact7 %>% filter(status==1) %>% ggplot(aes(factor(bmr_entry),feature_delta))+geom_bar() #status NA를 0으로 변경 
+clinical_info_delta <- clinical_info %>% select(SubjectID,diag_delta,onset_delta,onset_site)
+proact7 <- proact7 %>% left_join(clinical_info_delta,by="SubjectID") #기존 데이터에 onset site, onset으로부터 enroll시점까지 경과한 시간, 진단으로부터 enroll시점까지 경과한 시간 변수 추가
+proact7 <- proact7 %>% mutate(days_fromOnset=feature_delta+abs(onset_delta),
+                              days_fromOnset_month=round(days_fromOnset/30,2),
+                              days_fromDx=feature_delta+abs(diag_delta),
+                              days_fromDx_month=round(days_fromDx/30,2)) # onset과 Dx시점으로부터 enroll시점까지 경과한 시간을 일, 월로 계산해서 추가 
+#first visit시의 data만 남기기 
+proact7 <- proact7 %>% group_by(SubjectID) %>% arrange(feature_delta) %>% mutate(bmr_entry=BMR1[1L],king_entry=King[1L],mitos_entry=Mitos[1L]) 
+
+#exploratory data analysis with proact7
+diagnose(proact7) %>% print(n=30)
+describe(proact7) %>% print(n=30)
+
+proact7 <- proact7 %>% rename(feature_delta_month=feature_delta)
+proact7%>% group_by(SubjectID) %>% select(feature_delta)
+proact7 <- proact7 %>% mutate(feature_delta=round(feature_delta_month*30)) #featue_delta는 enroll부터 visit시점까지 경과한 시간(일), feature_delta_month는 경과시간(달) 
+
+
+# stage별 median time, standardized median time 비교 
+# King stage, SMT
+surv_death <- surv %>% filter(status==1) # 생존기록데이터중 사망한 환자만 추출
+proact_surv1 <- proact7 %>% filter(SubjectID %in% surv_death$SubjectID) %>% arrange(SubjectID,feature_delta) #전체 PROACT 데이터 중 사망한 환자만 추출 
+proact_surv_king <- proact_surv1 %>% group_by(SubjectID,King) %>% filter(row_number()==n()) 
+
+table_king_SMT <- proact_surv_king %>% as.tibble() %>%  group_by(SubjectID) %>% mutate(stan_time=days_fromOnset_month/max(days_fromOnset_month)) %>% 
+  ungroup() %>% 
+  group_by(King) %>% 
+  summarise(median_time=median(days_fromOnset_month),IQR_time=IQR(days_fromOnset_month),median_time_low_IQR=median_time-(IQR_time/2),median_time_high_IQR=median_time+(IQR_time/2),
+            stan_med_time=median(stan_time),stan_med_time_IQR=IQR(stan_time),stan_med_time_lowIQR=stan_med_time-(stan_med_time_IQR/2),stan_med_time_highIQR=stan_med_time+(stan_med_time_IQR/2)) %>% 
+  select(King,median_time,median_time_low_IQR,median_time_high_IQR,stan_med_time,stan_med_time_lowIQR,stan_med_time_highIQR) %>% 
+  mutate(median_time_IQR=bind_cols(median_time_low_IQR,median_time_high_IQR),standardized_median_time_IQR=bind_cols(stan_med_time_lowIQR,stan_med_time_highIQR)) %>% 
+  select(-c(median_time_low_IQR,median_time_high_IQR,stan_med_time_lowIQR,stan_med_time_highIQR)) %>% 
+  select(King,median_time,median_time_IQR,stan_med_time,standardized_median_time_IQR)
+
+proact_surv_king <- proact_surv_king %>% group_by(SubjectID) %>% mutate(stan_time=days_fromOnset_month/max(days_fromOnset_month))
+plot_king_SMT <- ggplot(aes(factor(King),stan_time,fill=factor(King)),data=proact_surv_king)+
+  geom_boxplot()+theme(panel.grid = element_blank())+coord_flip()+labs(x="King's stage",y="Standardized median time",fill="King's stage")
+
+#MiToS stage, SMT
+proact_surv_Mitos <- proact_surv1 %>% group_by(SubjectID,Mitos) %>% filter(row_number()==n())
+table_MiToS_SMT <- proact_surv_Mitos %>% as.tibble() %>%  group_by(SubjectID) %>% mutate(stan_time=days_fromOnset_month/max(days_fromOnset_month)) %>% 
+  ungroup() %>% 
+  group_by(Mitos) %>% 
+  summarise(median_time=median(days_fromOnset_month),IQR_time=IQR(days_fromOnset_month),median_time_low_IQR=median_time-(IQR_time/2),median_time_high_IQR=median_time+(IQR_time/2),
+            stan_med_time=median(stan_time),stan_med_time_IQR=IQR(stan_time),stan_med_time_lowIQR=stan_med_time-(stan_med_time_IQR/2),stan_med_time_highIQR=stan_med_time+(stan_med_time_IQR/2)) %>% 
+  select(Mitos,median_time,median_time_low_IQR,median_time_high_IQR,stan_med_time,stan_med_time_lowIQR,stan_med_time_highIQR) %>% 
+  mutate(median_time_IQR=bind_cols(median_time_low_IQR,median_time_high_IQR),standardized_median_time_IQR=bind_cols(stan_med_time_lowIQR,stan_med_time_highIQR)) %>% 
+  select(-c(median_time_low_IQR,median_time_high_IQR,stan_med_time_lowIQR,stan_med_time_highIQR)) %>% 
+  select(Mitos,median_time,median_time_IQR,stan_med_time,standardized_median_time_IQR)
+
+proact_surv_Mitos <- proact_surv_Mitos %>% group_by(SubjectID) %>% mutate(stan_time=days_fromOnset_month/max(days_fromOnset_month))
+plot_mitos_SMT <- ggplot(aes(factor(Mitos),stan_time,fill=factor(Mitos)),data=proact_surv_Mitos)+
+  geom_boxplot()+theme(panel.grid = element_blank())+coord_flip()+labs(x="MiToS stage",y="Standardized median time",fill="MiToS stage")
+
+#BMR stage, SMT
+proact_surv_BMR <- proact_surv1 %>% group_by(SubjectID,BMR1) %>% filter(row_number()==n())
+table_BMR_SMT <- proact_surv_BMR %>% as.tibble() %>%  group_by(SubjectID) %>% mutate(stan_time=days_fromOnset_month/max(days_fromOnset_month)) %>% 
+  ungroup() %>% 
+  group_by(BMR1) %>% 
+  summarise(median_time=median(days_fromOnset_month),IQR_time=IQR(days_fromOnset_month),median_time_low_IQR=median_time-(IQR_time/2),median_time_high_IQR=median_time+(IQR_time/2),
+            stan_med_time=median(stan_time),stan_med_time_IQR=IQR(stan_time),stan_med_time_lowIQR=stan_med_time-(stan_med_time_IQR/2),stan_med_time_highIQR=stan_med_time+(stan_med_time_IQR/2)) %>% 
+  select(BMR1,median_time,median_time_low_IQR,median_time_high_IQR,stan_med_time,stan_med_time_lowIQR,stan_med_time_highIQR) %>% 
+  mutate(median_time_IQR=bind_cols(median_time_low_IQR,median_time_high_IQR),standardized_median_time_IQR=bind_cols(stan_med_time_lowIQR,stan_med_time_highIQR)) %>% 
+  select(-c(median_time_low_IQR,median_time_high_IQR,stan_med_time_lowIQR,stan_med_time_highIQR)) %>% 
+  select(BMR1,median_time,median_time_IQR,stan_med_time,standardized_median_time_IQR)
+
+proact_surv_BMR <- proact_surv_BMR %>% group_by(SubjectID) %>% mutate(stan_time=days_fromOnset_month/max(days_fromOnset_month))
+plot_bmr_SMT <- ggplot(aes(factor(BMR1),stan_time,fill=factor(BMR1)),data=proact_surv_Mitos)+
+  geom_boxplot()+theme(panel.grid = element_blank())+coord_flip()+labs(x="BMR stage",y="Standardized median time",fill="BMR stage")
+
+plot_SMT <- grid.arrange(plot_king_SMT,plot_mitos_SMT,plot_bmr_SMT,ncol=1,nrow=3)
+
+#BMR stage의 stage간의 discriminatory ability, Cochrane-Armitage test
+result <- table(proact_surv$status,proact_surv$bmr_entry)
+round(prop.table(result)*100,2)
+prop.trend.test(result[2,],colSums(result)) #x2=130.25, p<.001
+barplot_bmr <- plot(t(result),col=c("grey","black"),
+     main="Probabilities according to BMR stage at entry",
+     ylab="Death",
+     xlab="BMR stage at entry")
+#BMR stage간 duration 기간 차이있는지 비교, Kruskal-Wallis test
+shapiro.test(proact_surv$days_fromOnset[proact_surv$bmr_entry==0])
+shapiro.test(proact_surv$days_fromOnset[proact_surv$bmr_entry==1])
+shapiro.test(proact_surv$days_fromOnset[proact_surv$bmr_entry==2])
+shapiro.test(proact_surv$days_fromOnset[proact_surv$bmr_entry==3])
+shapiro.test(proact_surv$days_fromOnset[proact_surv$bmr_entry==4])
+shapiro.test(proact_surv$days_fromOnset[proact_surv$bmr_entry==5])
+kruskal.test(days_fromOnset~factor(bmr_entry),data=proact_surv)
+result=mctp(days_fromOnset~factor(bmr_entry),data=proact_surv)
+summary(result)
+pairwise.wilcox.test(proact_surv$days_fromOnset, proact_surv$bmr_entry, p.adj="bonferroni") #0:314, 1:1116, 2:1016, 4:962
+proact_surv %>% group_by(bmr_entry) %>% tally()
+df.summary <- df %>%
+  group_by(dose) %>%
+  summarise(
+    sd = sd(len, na.rm = TRUE),
+    len = mean(len)
+  )
+ggplot(
+  df.summary, 
+  aes(x = len, y = dose, xmin = len-sd, xmax = len+sd)
+) +
+  geom_point(aes(color = dose)) +
+  geom_errorbarh(aes(color = dose), height=.2)+
+  theme_light()
+
+# initialstage 에 따른 KM curve, log-rank test, Cox regression analysis
+proact_surv <- proact7 %>% group_by(SubjectID) %>% filter(feature_delta==max(feature_delta)) # PROACT data중 last visit시의 데이터를 filtering해서 생존분석 
+survdiff(Surv(feature_delta,status==1)~king_entry,data=proact_surv) 
+survdiff(Surv(feature_delta,status==1)~king_entry,data=proact_surv)
+survdiff(Surv(feature_delta,status==1)~king_entry,data=proact_surv)
+
+plot_KM <- list()
+plot_KM[[1]] <- ggsurvplot(survfit(Surv(feature_delta,status==1)~king_entry,data=proact_surv),xlab="elapsed time from enrollment(days)",title="KMcurve according to initial King's stage")
+plot_KM[[2]] <- ggsurvplot(survfit(Surv(feature_delta,status==1)~mitos_entry,data=proact_surv),xlab="elapsed time from enrollment(days)",title="KMcurve according to initial MiToS stage")
+plot_KM[[3]] <- ggsurvplot(survfit(Surv(feature_delta,status==1)~bmr_entry,data=proact_surv),xlab="elapsed time from enrollment(days)",title="KMcurve according to initial BMR stage")
+
+plot_KM_total <- arrange_ggsurvplots(plot_KM,print=T,ncol=1,nrow=3)
+
+fit1 <- coxph(Surv(feature_delta,status==1)~king_entry,proact_surv) #enroll시점의 king's stage에 따른 cox regression analysis
+fit2 <- coxph(Surv(feature_delta,status==1)~mitos_entry,proact_surv) #enroll시점의 MiToS stage에 따른 cox regression analysis
+fit3 <- coxph(Surv(feature_delta,status==1)~bmr_entry,proact_surv) #enroll시점의 BMR stage에 따른 cox regression analysis
+
+#HR, CI, P value 정리 table 제작 함수 (coxtable)
+coxtable <- function(x){
+  HR <- round(exp(coef(x)),2)
+  CI <- round(exp(confint(x)),2)
+  P <- round(coef(summary(x))[,5],3)
+  colnames(CI) <- c("Lower","Higher")
+  table <- as.data.frame(cbind(HR,CI,P))
+  table
+}
+
+t1 <- coxtable(fit1)
+t2 <- coxtable(fit2)
+t3 <- coxtable(fit3)
+
+# cox regression 정리된 결과 docx파일로 추출 
+library(officer)
+word_proact <- read_docx()
+
+word_proact <- word_proact%>% body_add_par("Standardized median time analysis",style="centered") %>% body_add_table(plot_SMT,style="table_template") %>% body_add_par(" ") 
+word_proact <- word_proact%>% body_add_par("Cox regression analysis of Kins's stage at entry",style="centered") %>% body_add_table(t1,style="table_template") %>% body_add_par(" ") 
+word_proact <- word_proact%>% body_add_par("Cox regression analysis of MiToS stage at entry",style="centered") %>% body_add_table(t2,style="table_template") %>% body_add_par(" ")
+word_proact <- word_proact%>% body_add_par("Cox regression analysis of BMR stage at entry",style="centered") %>% body_add_table(t3,style="table_template") %>% body_add_par(" ")
+word_proact <- word_proact%>% body_add_par("KMcurve according to initial stage***",style="centered") %>% body_add_img(plot_KM_total,width=4,height=4,style="centered") %>% body_add_par(" ")
+print(word_proact,target="PROACT BMR staging.docx",append=F)
+
+
+#BMR stage만들어서 dataframe에 추가하는 함수 BMR_make, BMR stage 변수명은 BMR 뒤에 각각을 정하는 기준을 붙여서 만듦 
+BMR_make <- function(df,b_1,b_2,m_1,m_2,r_1,r_2,bmr_1,bmr_2,bmr_3,bmr_4){
+  df <- df %>%  mutate(B=case_when(b1+b2+b3<=b_1~0,b1+b2+b3<=b_2~1,b1+b2+b3<=6~2),     #df 데이터 프레임 이름 (예. proact6), b_1, b_2는 B의 점수를 정하는 기준치 (예. 1, 3)
+                       M=case_when(m1+m2+m3+m4+m5+m6<=m_1~0,m1+m2+m3+m4+m5+m6<=m_2~1,m1+m2+m3+m4+m5+m6<=12~2), #m_1, m_2는 M의 점수를 정하는 기준치
+                       R=case_when(r1+r2+r3<=r_1~0,r1+r2+r3<=r_2~1,r1+r2+r3<=6~2)) %>%  #r_1, r_2는 R의 점수를 정하는 기준치
+    mutate(str_c("BMR","-",b_1,b_2,m_1,m_2,r_1,r_2,bmr_1,bmr_2,bmr_3,bmr_4)=case_when(B+M+R<=bmr_1~4,  #bmr_1,2,3,4는 각각 BMR stage의 기준을 정하는 기준치 
+                          B+M+R<=bmr_2~3,
+                          B+M+R<=bmr_3~2,
+                          B+M+R<=bmr_4~1,
+                          B+M+R<=6~0)) %>% 
+    mutate(str_c("BMR","-",b_1,b_2,m_1,m_2,r_1,r_2,bmr_1,bmr_2,bmr_3,bmr_4)=case_when(R1_Dyspnea==0|R3_Respiratory_Insufficiency<4|Gastrostomy==T~4,   #King stage의 4a, 4b를 만족하는 상태는 항상 4로 고정, 사망한 상태인 King stage 5는 5로 고정 
+                          King==5~5,
+                          TRUE~BMR1)) %>% 
+    select(-c(b1,b2,b3,m1,m2,m3,m4,m5,m6,r1,r2,r3,B,M,R))
+}
+
+# 데이터 csv 파일로 추출, dataframe과 변수 등 모든 결과 R.Data파일로 저장 
+proact7 <- fread("BMR_staging_new.csv") 
+fwrite(proact7,"BMR_staging_new.csv",append=F,quote=F,row.names=F) #na="NA",dec=".",row.names=F,col.names=F)
 save.image("20210909.RData")
 load("20210909.RData")
