@@ -575,38 +575,77 @@ plot_bmr_SMT <- ggplot(aes(factor(BMR1),stan_time,fill=factor(BMR1)),data=proact
 
 plot_SMT <- grid.arrange(plot_king_SMT,plot_mitos_SMT,plot_bmr_SMT,ncol=1,nrow=3)
 
+# 출력된 결과 txt파일로 저장하는 함수: x;출력된결과변수명, y;파일이름(확장자제외), z; 출력된 결과 위에 추가로 나오게할 내용  
+txt_save <- function(x,y){
+  capture.output(x,
+                 file=paste0(y,".txt"), append = TRUE)
+}
+
 #BMR stage의 stage간의 discriminatory ability, Cochrane-Armitage test
 result <- table(proact_surv$status,proact_surv$bmr_entry)
 round(prop.table(result)*100,2)
-prop.trend.test(result[2,],colSums(result)) #x2=130.25, p<.001
+CA_bmr <- prop.trend.test(result[2,],colSums(result)) 
+CA_bmr1 <- as.data.frame(c(CA_bmr$statistic,round(CA_bmr$p.value,4)))
 barplot_bmr <- plot(t(result),col=c("grey","black"),
-     main="Probabilities according to BMR stage at entry",
-     ylab="Death",
-     xlab="BMR stage at entry")
+                    main="Death Probabilities according to BMR stage at entry",
+                    ylab="Death",
+                    xlab="BMR stage at entry")
+
 #BMR stage간 duration 기간 차이있는지 비교, Kruskal-Wallis test
-shapiro.test(proact_surv$days_fromOnset[proact_surv$bmr_entry==0])
-shapiro.test(proact_surv$days_fromOnset[proact_surv$bmr_entry==1])
-shapiro.test(proact_surv$days_fromOnset[proact_surv$bmr_entry==2])
-shapiro.test(proact_surv$days_fromOnset[proact_surv$bmr_entry==3])
-shapiro.test(proact_surv$days_fromOnset[proact_surv$bmr_entry==4])
-shapiro.test(proact_surv$days_fromOnset[proact_surv$bmr_entry==5])
-kruskal.test(days_fromOnset~factor(bmr_entry),data=proact_surv)
-result=mctp(days_fromOnset~factor(bmr_entry),data=proact_surv)
+krus_bmr <- kruskal.test(days_fromOnset~factor(bmr_entry),data=proact_surv)
+mctp_bmr <- mctp(days_fromOnset~factor(bmr_entry),data=proact_surv)
+table_bmr_kw <- as.data.frame(cbind(krus_bmr$p.value, mctp_bmr$Analysis[0],round(mctp_bmr$Analysis$p.Value,4)))
+colnames(table_bmr_kw) <- c("Kruskal-wallis test overall P-value","post-hoc test P-value")
+table_bmr_kw
+
+#King's stage의 stage간의 discriminatory ability, Cochrane-Armitage test
+result <- table(proact_surv$status,proact_surv$king_entry)
+round(prop.table(result)*100,2)
+CA_king <- prop.trend.test(result[2,],colSums(result)) 
+CA_king1 <- as.data.frame(c(CA_king$statistic,round(CA_king$p.value,4)))
+barplot_king <- plot(t(result),col=c("grey","black"),
+                     main="Death Probabilities according to King's stage at entry",
+                     ylab="Death",
+                     xlab="King's stage at entry")
+#King's stage간 duration 기간 차이있는지 비교, Kruskal-Wallis test
+krus_king <- kruskal.test(days_fromOnset~factor(king_entry),data=proact_surv)
+mctp_king <- mctp(days_fromOnset~factor(king_entry),data=proact_surv)
+table_king_kw <- as.data.frame(cbind(krus_king$p.value, mctp_king$Analysis[0],round(mctp_king$Analysis$p.Value,4)))
+colnames(table_king_kw) <- c("Kruskal-wallis test overall P-value","post-hoc test P-value")
+table_king_kw
+
+#MiToS stage의 stage간의 discriminatory ability, Cochrane-Armitage test
+result <- table(proact_surv$status,proact_surv$mitos_entry)
+round(prop.table(result)*100,2)
+CA_mitos <- prop.trend.test(result[2,],colSums(result)) 
+CA_mitos1 <- as.data.frame(c(CA_mitos$statistic,round(CA_mitos$p.value,4)))
+barplot_mitos <- plot(t(result),col=c("grey","black"),
+                      main="Death Probabilities according to MiToS stage at entry",
+                      ylab="Death",
+                      xlab="MiToS stage at entry")
+#MiToS stage간 duration 기간 차이있는지 비교, Kruskal-Wallis test
+krus_mitos <- kruskal.test(days_fromOnset~factor(mitos_entry),data=proact_surv)
+mctp_mitos <- mctp(days_fromOnset~factor(mitos_entry),data=proact_surv)
+table_mitos_kw <- as.data.frame(cbind(krus_mitos$p.value, mctp_mitos$Analysis[0],round(mctp_mitos$Analysis$p.Value,4)))
+colnames(table_mitos_kw) <- c("Kruskal-wallis test overall P-value","post-hoc test P-value")
+table_mitos_kw
+
+
 summary(result)
 pairwise.wilcox.test(proact_surv$days_fromOnset, proact_surv$bmr_entry, p.adj="bonferroni") #0:314, 1:1116, 2:1016, 4:962
 proact_surv %>% group_by(bmr_entry) %>% tally()
-df.summary <- df %>%
-  group_by(dose) %>%
+df.summary <- proact_surv %>%
+  group_by(bmr_entry) %>%
   summarise(
-    sd = sd(len, na.rm = TRUE),
-    len = mean(len)
+    sd = IQR(days_fromOnset, na.rm = TRUE),
+    len = median(days_fromOnset)
   )
 ggplot(
   df.summary, 
-  aes(x = len, y = dose, xmin = len-sd, xmax = len+sd)
+  aes(x = len, y = as.factor(bmr_entry), xmin = len-(sd/2), xmax = len+(sd/2))
 ) +
-  geom_point(aes(color = dose)) +
-  geom_errorbarh(aes(color = dose), height=.2)+
+  geom_point(aes(color = as.factor(bmr_entry))) +
+  geom_errorbarh(aes(color = as.factor(bmr_entry)), height=.2)+
   theme_light()
 
 # initialstage 에 따른 KM curve, log-rank test, Cox regression analysis
@@ -615,10 +654,10 @@ survdiff(Surv(feature_delta,status==1)~king_entry,data=proact_surv)
 survdiff(Surv(feature_delta,status==1)~king_entry,data=proact_surv)
 survdiff(Surv(feature_delta,status==1)~king_entry,data=proact_surv)
 
-plot_KM <- list()
-plot_KM[[1]] <- ggsurvplot(survfit(Surv(feature_delta,status==1)~king_entry,data=proact_surv),xlab="elapsed time from enrollment(days)",title="KMcurve according to initial King's stage")
-plot_KM[[2]] <- ggsurvplot(survfit(Surv(feature_delta,status==1)~mitos_entry,data=proact_surv),xlab="elapsed time from enrollment(days)",title="KMcurve according to initial MiToS stage")
-plot_KM[[3]] <- ggsurvplot(survfit(Surv(feature_delta,status==1)~bmr_entry,data=proact_surv),xlab="elapsed time from enrollment(days)",title="KMcurve according to initial BMR stage")
+plot_KM <- list()  
+plot_KM[[1]] <- ggsurvplot(survfit(Surv(feature_delta,status==1)~bmr_entry,data=proact_surv),xlab="elapsed time from enrollment(days)",title="KMcurve according to initial BMR stage")
+plot_KM[[2]] <- ggsurvplot(survfit(Surv(feature_delta,status==1)~king_entry,data=proact_surv),xlab="elapsed time from enrollment(days)",title="KMcurve according to initial King's stage")
+plot_KM[[3]] <- ggsurvplot(survfit(Surv(feature_delta,status==1)~mitos_entry,data=proact_surv),xlab="elapsed time from enrollment(days)",title="KMcurve according to initial MiToS stage")
 
 plot_KM_total <- arrange_ggsurvplots(plot_KM,print=T,ncol=1,nrow=3)
 
@@ -644,11 +683,20 @@ t3 <- coxtable(fit3)
 library(officer)
 word_proact <- read_docx()
 
-word_proact <- word_proact%>% body_add_par("Standardized median time analysis",style="centered") %>% body_add_table(plot_SMT,style="table_template") %>% body_add_par(" ") 
-word_proact <- word_proact%>% body_add_par("Cox regression analysis of Kins's stage at entry",style="centered") %>% body_add_table(t1,style="table_template") %>% body_add_par(" ") 
-word_proact <- word_proact%>% body_add_par("Cox regression analysis of MiToS stage at entry",style="centered") %>% body_add_table(t2,style="table_template") %>% body_add_par(" ")
+# word_proact <- word_proact%>% body_add_par("SMT analysis",style="centered") %>% body_add_img(plot_bmr_SMT,width=4,height=4,style="centered") %>% body_add_par(" ")
+word_proact <- word_proact%>% body_add_par("Cochrane-armitage test for discriminatory ability of BMR stage",style="centered") %>% body_add_table(CA_bmr1,style="table_template") %>% body_add_par(" ")
+word_proact <- word_proact%>% body_add_par("kruskal-wallis test for discriminatory ability of BMR stage",style="centered") %>% body_add_table(table_bmr_kw,style="table_template") %>% body_add_par(" ")
+# word_proact <- word_proact%>% body_add_par("Plot about discriminatory ability of BMR stage",style="centered") %>% body_add_plot(barplot_bmr,width=4,height=4,style="centered") %>% body_add_par(" ")
+word_proact <- word_proact%>% body_add_par("Cochrane-armitage test for discriminatory ability of King's stage",style="centered") %>% body_add_table(CA_king1,style="table_template") %>% body_add_par(" ")
+word_proact <- word_proact%>% body_add_par("kruskal-wallis test for discriminatory ability of King's stage",style="centered") %>% body_add_table(table_king_kw,style="table_template") %>% body_add_par(" ")
+# word_proact <- word_proact%>% body_add_par("Plot about discriminatory ability of King's stage",style="centered") %>% body_add_plot(barplot_king,width=4,height=4,style="centered") %>% body_add_par(" ")
+word_proact <- word_proact%>% body_add_par("Cochrane-armitage test for discriminatory ability of MiToS stage",style="centered") %>% body_add_table(CA_mitos1,style="table_template") %>% body_add_par(" ")
+word_proact <- word_proact%>% body_add_par("kruskal-wallis test for discriminatory ability of MiToS stage",style="centered") %>% body_add_table(table_mitos_kw,style="table_template") %>% body_add_par(" ")
+# word_proact <- word_proact%>% body_add_par("Plot about discriminatory ability of MiToS stage",style="centered") %>% body_add_plot(barplot_mitos,width=4,height=4,style="centered") %>% body_add_par(" ")
 word_proact <- word_proact%>% body_add_par("Cox regression analysis of BMR stage at entry",style="centered") %>% body_add_table(t3,style="table_template") %>% body_add_par(" ")
-word_proact <- word_proact%>% body_add_par("KMcurve according to initial stage***",style="centered") %>% body_add_img(plot_KM_total,width=4,height=4,style="centered") %>% body_add_par(" ")
+word_proact <- word_proact%>% body_add_par("Cox regression analysis of Kins's stage at entry",style="centered") %>% body_add_table(t1,style="table_template") %>% body_add_par(" ")
+word_proact <- word_proact%>% body_add_par("Cox regression analysis of MiToS stage at entry",style="centered") %>% body_add_table(t2,style="table_template") %>% body_add_par(" ")
+# word_proact <- word_proact%>% body_add_par("KMcurve according to initial stage***",style="centered") %>% body_add_img(plot_KM_total,width=4,height=4,style="centered") %>% body_add_par(" ")
 print(word_proact,target="PROACT BMR staging.docx",append=F)
 
 
