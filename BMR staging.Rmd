@@ -1,0 +1,127 @@
+---
+title: "BMR staging"
+subtitle: "version 1.0"
+author: "유일한"
+date: "'r format(Sys.Date())'"
+output: 
+  word_document:
+    fig_height: 6
+    fig_width: 9
+    toc: no
+    reference_docx: template.docx
+  pdf_document:
+    fig_height: 6
+    fig_width: 10
+    toc: no
+  html_document:
+    fig_height: 6
+    fig_width: 10
+    highlight: textmate
+    theme: cosmo
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.aligh="center", message = F, warning = F,fig.height = 8, cache=T, dpi=300, dev="tiff")
+```
+
+# 필요한 library, dataset 로딩
+
+```{r echo=F}
+library(tidyverse)
+library(dlookr)
+library(broom)
+library(gridExtra)
+library(data.table)
+library(knitr)
+library(writexl)
+library(lubridate)
+library(gmodels)
+library(moonBook)
+library(survival)
+library(survminer)
+library(epiDisplay)
+options("scipen"=100)
+options(max.print=1000000)
+```
+# ALSFRS score dataset: alsfrs_r
+```{r echo=F}
+alsfrs_r <- fread("ALSFRS_rev.csv")
+```
+
+# exclude Q2 and Q9 for BMR staging
+```{r echo=F}
+alsfrs_r1 <- alsfrs_r %>% select(-c(Q2_Salivation,Q9_Climbing_Stairs)) 
+```
+# collapse ALSFRS-r subscore from 0 to 2  
+# Q1,Q3,Q4,Q5,Q6,Q7,Q8,R1,R2는 0과1은 0으로, 2,3은 1로, 4는 2로 collapse
+# R3은 0은 0으로, 1,2,3은 1로 4는 2로 collapse
+```{r echo=F}
+alsfrs_r1 <- alsfrs_r1 %>% mutate(
+  Q1=case_when(Q1_Speech<2~0,  Q1_Speech<4~1,  Q1_Speech==4~2),
+  Q3=case_when(Q3_Swallowing<2~0,  Q3_Swallowing<4~1,  Q3_Swallowing==4~2),
+  Q4=case_when(Q4_Handwriting<2~0,  Q4_Handwriting<4~1,  Q4_Handwriting==4~2),
+  Q5=case_when(Q5_Cutting<2~0,  Q5_Cutting<4~1,  Q5_Cutting==4~2),
+  Q6=case_when(Q6_Dressing_and_Hygiene<2~0,  Q6_Dressing_and_Hygiene<4~1,  Q6_Dressing_and_Hygiene==4~2),
+  Q7=case_when(Q7_Turning_in_Bed<2~0,  Q7_Turning_in_Bed<4~1,  Q7_Turning_in_Bed==4~2),
+  Q8=case_when(Q8_Walking<2~0,  Q8_Walking<4~1,  Q8_Walking==4~2),
+  R1=case_when(R1_Dyspnea<2~0,  R1_Dyspnea<4~1,  R1_Dyspnea==4~2),
+  R2=case_when(R2_Orthopnea<2~0,  R2_Orthopnea<4~1,  R2_Orthopnea==4~2),
+  R3=case_when(R3_Respiratory_Insufficiency<1~0,  R3_Respiratory_Insufficiency<4~1,  R3_Respiratory_Insufficiency==4~2),
+)
+```
+### B, M, R individual staging: 
+## if all items score of the domain are 4 (normal), then the corresponding domain is assigned stage 0 (not affected) 
+## assigned stage 2 (loss of functional autonomy), if the following is the case. 
+#   either Q1_Speech or Q3_Swallowing item score is 1 or less (bulbar domain)
+#   two or more item scores of Q4_Handwriting-Q8_Walking are 1 or less (motor domain) 
+#   any item score of R1_Dyspnea-R3_Respiratory_Insufficiency is 1 or less (respiratory domain)
+## otherwise (neither “not affected” nor “loss of autonomy”), then assign stage 1 (affected) 
+```{r}
+alsfrs_r1 <- alsfrs_r1 %>% mutate(B_stage=case_when(Q1_Speech==4 & Q3_Swallowing==4~0, 
+                                                    Q1_Speech<=1 | Q3_Swallowing<=1~2, 
+                                                    TRUE~1),
+                                  M_stage=case_when(Q4_Handwriting==4 & Q5_Cutting==4 & Q6_Dressing_and_Hygiene==4 & Q7_Turning_in_Bed==4 & Q8_Walking==4~0, 
+                                                    sum(Q4_Handwriting<=1 | Q5_Cutting<=1 | Q6_Dressing_and_Hygiene<=1 | Q7_Turning_in_Bed<=1 | Q8_Walking<=1)>=2~2, 
+                                                    TRUE~1),
+                                  R_stage=case_when(R1_Dyspnea==4 & R2_Orthopnea==4 & R3_Respiratory_Insufficiency==4~0,
+                                                    R1_Dyspnea<=1|R2_Orthopnea<=1|R3_Respiratory_Insufficiency<=1~2,
+                                                    TRUE~1)
+)
+```
+# BMR staging:
+# stage 0, presymptomatic stage (mutation carrier), eg, B0M0R0
+# stage 1, early stage, involving only one domain, B1M0R0, B0M1R0, etc
+# stage 2, early intermediate stage, involving two domain w/o loss of autonomy, or involving one domain with loss of functional autonomy, eg, B1M1R0, B2M0R0, etc,
+# stage 3,  intermediate stage involving all three domains, or involving two domains with loss of autonomy in one domain, B1M1R1, B2M1R0, etc,
+# stage 4,  late intermediate stage, involving all three domains with loss of autonomy in one domain, or involving two domains with loss of autonomy in two domains, eg,   B2M1R1, B2M2R0, etc,
+# stage 5, advanced stage, all three domains affected, and loss of autonomy in two domains, eg, B2M2R1, etc
+# stage 6, terminal stage, loss of automy in all three domains, eg, B2M2R2. 
+```{r}
+alsfrs_r1 <- alsfrs_r1 %>% mutate(BMR_stage=case_when(B_stage==2 & M_stage==2 & R_stage==2 ~ 6,
+                                                      B_stage + M_stage + R_stage==5 ~ 5,
+                                                      B_stage + M_stage + R_stage==4 ~ 4,
+                                                      B_stage + M_stage + R_stage==3 ~ 3,
+                                                      B_stage + M_stage + R_stage==2 ~ 2,
+                                                      B_stage + M_stage + R_stage==1 ~ 1,
+                                                      B_stage + M_stage + R_stage==0 ~ 0,
+                                                      )
+                                  )
+alsfrs_r1 <- alsfrs_r1 %>% mutate(status=0)
+```
+# survival data: surv
+# survival data중 사망인 날짜와 사망시점의 stage설정 (MiToS 5, King 5, BMR 7)
+# 총 사망환자 3075명 
+# BMR stage 
+# stage 7, death추가 
+```{r}
+surv <- fread("survival.csv")
+surv <- surv %>% rename(feature_delta=time_event)
+surv <- surv %>% filter(status==1) %>% mutate(King=5, MiToS=5, BMR_stage=7)
+```
+#glance at BMR staging
+```{r}
+glimpse(alsfrs_r3)
+```
